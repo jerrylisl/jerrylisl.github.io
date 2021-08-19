@@ -2,18 +2,18 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Posts on My New Hugo Site</title>
-    <link>http://cojerrylislithub.io/post/</link>
+    <link>https://jerrylisl.github.io/post/</link>
     <description>Recent content in Posts on My New Hugo Site</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Thu, 19 Aug 2021 17:18:17 +0800</lastBuildDate><atom:link href="http://cojerrylislithub.io/post/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Thu, 19 Aug 2021 19:54:18 +0800</lastBuildDate><atom:link href="https://jerrylisl.github.io/post/index.xml" rel="self" type="application/rss+xml" />
     <item>
-      <title>First</title>
-      <link>http://cojerrylislithub.io/post/first/</link>
-      <pubDate>Thu, 19 Aug 2021 17:18:17 +0800</pubDate>
+      <title>Test</title>
+      <link>https://jerrylisl.github.io/post/test/</link>
+      <pubDate>Thu, 19 Aug 2021 19:54:18 +0800</pubDate>
       
-      <guid>http://cojerrylislithub.io/post/first/</guid>
-      <description></description>
+      <guid>https://jerrylisl.github.io/post/test/</guid>
+      <description>###that&amp;rsquo;s ok</description>
     </item>
     
   </channel>
