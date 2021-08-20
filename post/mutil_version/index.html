@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-us" lang="en-us">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.85.0" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>多版本的建模与实现 &middot; L</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.png">
+
+  
+  
+</head>
+
+  <body class=" ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://jerrylisl.github.io/"><h1>L</h1></a>
+      <p class="lead">
+       好记性不如烂笔头 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://jerrylisl.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>&copy; 2021. All rights reserved. </p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>多版本的建模与实现</h1>
+  <time datetime=2021-08-19T19:54:18&#43;0800 class="post-date">Thu, Aug 19, 2021</time>
+  <h1 id="多版本的能力">多版本的能力</h1>
+<p>多版本属于比较常见的产品/程序概念了，这里不多花笔墨介绍，多版本的能力可以抽象为两个方面：</p>
+<h2 id="1历史">1.历史</h2>
+<p>如果需要关注实体的历史情况，则可引入多版本来记录其“演进过程”，一些实际应用包括：文档编辑历史、git开发中历史提交树，均是用到了多版本“历史”这一能力</p>
+<h2 id="2协同">2.协同</h2>
+<p>在一些场景下，对于同一实体，需要允许多个使用者同时对其进行更改与维护，同时需要保证实体整体的合法性（合法的定义由使用场景决定），最典型的实际应用即为git开发中的多分支开发，以及比较常见的文档协同编辑或草稿态，均是用到了多版本“协同”这一能力</p>
+<h1 id="实现思路">实现思路</h1>
+<p>多版本的实现方式较为自由，但不外乎两种思路：</p>
+<h2 id="1增量多版本diff">1.增量多版本（diff）</h2>
+<p>核心思想为仅维护一份全量版本，生成新版本时，记录由已有版本到新版本的增量数据（或者新版本到旧版本的数据）</p>
+<p>以mysql为代表的一系列数据库均采用了该思路来实现多版本</p>
+<p>mysql在事务是使用了多版本并发控制来保证事务的隔离性，利用undo log可完成最新的数据快照到旧版本的“回溯”（事务回滚同样依赖undo log），保证了多个事务的有效并存，undo log实质即为版本数据的增量diff</p>
+<p>git中的众多分支数据，也是基于diff实现的增量多版本</p>
+<p>优点：</p>
+<p>低存储占用：只存储了一份全量的内容版本</p>
+<p>冲突概率低：基于diff意味着只有更新同粒度的数据才可能发生冲突，能有效减少数据写冲突（mysql按行加锁）</p>
+<p>缺点：</p>
+<p>额外的语义解析：由增量数据生成对应的版本往往依赖特定的规则，存在额外的维护成本</p>
+<p>版本构建的成本（可忽略）：由增量数据构建快照本身存在一定的计算成本</p>
+<h2 id="2快照多版本">2.快照多版本</h2>
+<p>核心思想为每次生成新版本时均创建一份对应的全量版本快照，每次直接使用特定版本的全量数据</p>
+<p>etcd中的kv多版本采用了快照多版本来实现</p>
+<p>etcd底层使用了BoltDB,BoltDB 中存储的 key是reversion, value 则是etcd 自己的 key-value组合，也就是说 etcd BoltDB 中保存每个版本，从而实现多版本机制</p>
+<p>优点：</p>
+<p>语义/实现简单：由于直接对全量内容进行创建，整体实现上相对简单，也更加直观</p>
+<p>没有额外的构建成本</p>
+<p>缺点：</p>
+<p>高存储占用：全量存储意味着更高的存储占用</p>
+<p>强制串行写：每次的写操作都会导致全量的数据读写，并行必会有冲突，从而导致强制串行写</p>
+<h1 id="实现手段">实现手段</h1>
+<p>实质：引入版本号（时间戳）</p>
+<p>通过id+version来唯一确定特定版本的实体</p>
+<p>添加版本窗口：</p>
+<p>1.过期时间——时间窗口</p>
+<p>2.前置version——版本窗口</p>
+<p>3.历史表——最新窗口</p>
+
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>

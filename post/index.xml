@@ -1,18 +1,19 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Posts on </title>
+    <title>Posts on L</title>
     <link>https://jerrylisl.github.io/post/</link>
-    <description>Recent content in Posts on </description>
+    <description>Recent content in Posts on L</description>
     <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
     <lastBuildDate>Thu, 19 Aug 2021 19:54:18 +0800</lastBuildDate><atom:link href="https://jerrylisl.github.io/post/index.xml" rel="self" type="application/rss+xml" />
     <item>
-      <title>Test</title>
-      <link>https://jerrylisl.github.io/post/test/</link>
+      <title>多版本的建模与实现</title>
+      <link>https://jerrylisl.github.io/post/mutil_version/</link>
       <pubDate>Thu, 19 Aug 2021 19:54:18 +0800</pubDate>
       
-      <guid>https://jerrylisl.github.io/post/test/</guid>
-      <description>###that&amp;rsquo;s ok</description>
+      <guid>https://jerrylisl.github.io/post/mutil_version/</guid>
+      <description>多版本的能力 多版本属于比较常见的产品/程序概念了，这里不多花笔墨介绍，多版本的能力可以抽象为两个方面：</description>
     </item>
     
   </channel>
