@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-us" lang="en-us">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.85.0" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>理解mysql的online_ddl特性 &middot; L</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.png">
+
+  
+  
+</head>
+
+  <body class=" ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://jerrylisl.github.io/"><h1>L</h1></a>
+      <p class="lead">
+       好记性不如烂笔头 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://jerrylisl.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>&copy; 2021. All rights reserved. </p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>理解mysql的online_ddl特性</h1>
+  <time datetime=2021-10-31T18:55:32&#43;0800 class="post-date">Sun, Oct 31, 2021</time>
+  <h1 id="online-ddl做了什么">online ddl做了什么</h1>
+<p>ddl的作用无需多言，其使用对于大家而言也是家常便饭，mysql在5.6版本之后引入了online ddl特性
+对于数据库而言，新的特性引入往往都为了提升性能，概括地说，online ddl提供了两种能力：</p>
+<h2 id="1原地执行不复制表ddl">1.原地执行（不复制表）ddl</h2>
+<p>原地执行ddl会减少额外的表复制需求，这意味着更少的空间占用和磁盘io</p>
+<h2 id="2允许ddl过程中查询与dml语句并行执行">2.允许ddl过程中查询与dml语句并行执行</h2>
+<p>在执行ddl的同时允许并发执行dml或查询语句，减少了数据库的“不可用区间”，并能处理更多的事务</p>
+<h1 id="如何使用online-ddl">如何使用online ddl</h1>
+<p>实际上，online ddl可以被看作一项“被动”的特性，无需做额外指定，mysql会对ddl是否可以“就地执行”以及能够允许的并发强度进行评估，并按实际情况执行online ddl，当然，这个过程中仍会有加锁的动作
+需要明确的是，正因为这是一项“被动”的特性，mysql不能保证所有的ddl都能够被原地执行或同时并发执行dml，两项能力的使用与否取决于ddl本身要执行的动作的“成本”
+大多数情况，我们不用费心于online ddl的具体策略，但仍可以使用两个参数来控制online ddl的具体策略：</p>
+<h2 id="algorithm">ALGORITHM:</h2>
+<p>该参数指示是否原地执行ddl，可选值为COPY,INPLACE,DEFAULT
+这个参数的意义和可选选项的意义都不言自明，COPY,INPLACE分别指示了复制表执行以及原地执行使用DEFAULT则会优先使用INPLACE，不行则使用COPY</p>
+<h2 id="lock">LOCK:</h2>
+<p>改参数指示加锁策略，用于控制ddl中的并发dml，可选值为DEFAULT,NONE,SHARED,EXCLUSIVE
+NONE,SHARED,EXCLUSIVE分别对应了允许读写（不加锁），允许读，不允许并发读写三个级别，允许的并发强度逐渐降低
+使用DEFAULT会在ALGORITHM的基础上选择并发强度最高的锁级别</p>
+<p>不难发现，两个参数分别控制了online  ddl的两部分能力，而从上述参数的可选值可以看出，在ALGORITHM和LOCK均使用DEFAULT的情况下，mysql会基于性能优先的考量，选择更高效的策略，这也是我们无需额外费心与online ddl具体策略的原因</p>
+<h1 id="online-ddl的主要步骤">online ddl的主要步骤：</h1>
+<p>接下来讨论一下online ddl的主要步骤，online ddl主要分为三个阶段：</p>
+<h2 id="1初始化">1.初始化</h2>
+<p>这一步会在表上加上一个共享级别的mdl，同时根据ddl语句涉及到的表详情来评估ddl阶段可允许的并发强度，据此得到ddl期间允许并发执行的query和dml操作数限制</p>
+<h2 id="2执行">2.执行</h2>
+<p>这一阶段会先基于初始化节点决定的并发强度，来决定是否将初始化阶段加上的mdl升级为排他锁，这一步本身不会有太大的耗时，之后，开始原地或复制表执行执行ddl操作</p>
+<h2 id="3提交表定义">3.提交表定义</h2>
+<p>这一阶段需要将mdl升级为排他锁，以完成新表结果的提交，不论ddl使用了哪种策略，这都会是个持续时间很短的过程</p>
+<p>可以看出，mysql在上面的三个步骤秉承了“最多并发”和“最小加锁”两个原则，在资源占用允许的范围内尽可能允许更多的并发，同时尽可能避免排他锁的添加，对于必须使用排他锁的情况，也尽量保证排他锁处于一个较小的粒度。</p>
+<h1 id="ddl的效率影响">ddl的效率影响</h1>
+<p>上述ddl的步骤中，步骤2中“开始原地或复制表执行执行ddl操作”这一部分为整个ddl过程中的主要部分，而这部分工作的效率取决于两个方面
+1.ddl操作是否能原地执行
+2.是否涉及表的重建</p>
+<h1 id="为大表ddl进行性能估计">为大表ddl进行性能估计</h1>
+<p>具体的耗时会由多个方面共同决定，如果需要执行ddl操作的表是一张巨大的数据表，则估算ddl的耗时会是一项重要的任务，毕竟，低估ddl的成本往往会在ddl的执行过程中让自己陷入一个进退两难的境地。</p>
+<p>对于这一项估计工作有一个较为常规的方法：</p>
+<h2 id="1按目标表的结构创建一张同样的复制表">1.按目标表的结构创建一张同样的复制表</h2>
+<h2 id="2在复制表中创建少量的数据">2.在复制表中创建少量的数据</h2>
+<h2 id="3在复制表上执行ddl操作">3.在复制表上执行ddl操作</h2>
+<h2 id="4确认复制表的ddl耗时并检查affected-rows">4.确认复制表的ddl耗时，并检查affected rows</h2>
+<p>根据复制表的耗时，可以按比例粗略得到目标表ddl的耗时估计，而affected rows则表征了ddl的策略选择了表复制还是原地执行，原地执行且不涉及表重建的ddl语句，其affected rows会为0</p>
+<p>然而上述方法估算出的结果几乎一定会小于实际的耗时，原因在于实际操作的目标表往往会在ddl的同时执行dml和其它查询语句，这些都会引发额外的加锁成本和资源占用，而上面的预估方法其实隐含了禁用查询和dml这一理想前提。</p>
+<h1 id="online-ddl的一些其它依赖">Online ddl的一些其它依赖：</h1>
+<h2 id="临时日志文件">临时日志文件</h2>
+<p>记录执行期间的并发dml，如果太大（执行一个巨大的事务）可能导致ddl失败</p>
+<h2 id="临时排序文件">临时排序文件</h2>
+<p>ddl过程中涉及表重建操作，使用排序文件</p>
+<h2 id="中间表文件">中间表文件</h2>
+<p>一些重建表的操作会创建与原表大小一致的临时表</p>
+<h1 id="参考资料">参考资料</h1>
+<p><a href="https://dev.mysql.com/doc/refman/5.7/en/innodb-online-ddl.html">https://dev.mysql.com/doc/refman/5.7/en/innodb-online-ddl.html</a>
+<a href="https://cloud.tencent.com/developer/article/1574126?from=article.detail.1143432">https://cloud.tencent.com/developer/article/1574126?from=article.detail.1143432</a>
+<a href="https://www.cnblogs.com/cchust/p/4639397.html">https://www.cnblogs.com/cchust/p/4639397.html</a></p>
+
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>

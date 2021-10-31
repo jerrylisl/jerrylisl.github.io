@@ -6,7 +6,16 @@
     <description>Recent content in Posts on L</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Thu, 19 Aug 2021 19:54:18 +0800</lastBuildDate><atom:link href="https://jerrylisl.github.io/post/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Sun, 31 Oct 2021 18:55:32 +0800</lastBuildDate><atom:link href="https://jerrylisl.github.io/post/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>理解mysql的online_ddl特性</title>
+      <link>https://jerrylisl.github.io/post/online_ddl/</link>
+      <pubDate>Sun, 31 Oct 2021 18:55:32 +0800</pubDate>
+      
+      <guid>https://jerrylisl.github.io/post/online_ddl/</guid>
+      <description>online ddl做了什么 ddl的作用无需多言，其使用对于大家而言也是家常便饭，mysql在5.</description>
+    </item>
+    
     <item>
       <title>多版本的建模与实现</title>
       <link>https://jerrylisl.github.io/post/mutil_version/</link>
