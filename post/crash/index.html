@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-us" lang="en-us">
+<head>
+  <link href="https://gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.85.0" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>了解下mysql的crash recovery &middot; L</title>
+  <meta name="description" content="" />
+
+  
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://jerrylisl.github.io/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.png">
+
+  
+  
+</head>
+
+  <body class=" ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://jerrylisl.github.io/"><h1>L</h1></a>
+      <p class="lead">
+       好记性不如烂笔头 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://jerrylisl.github.io/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>&copy; 2022. All rights reserved. </p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>了解下mysql的crash recovery</h1>
+  <time datetime=2022-01-20T22:14:05&#43;0800 class="post-date">Thu, Jan 20, 2022</time>
+  <p>Innodb的crash recovery机制使得使用者可以无需关注mysql内部可能的异常状态，虽然使用了这个名称——崩溃恢复，但实际InnoDB将crash recovery设定为每一次服务重启的一项“标准流程”，而并非只在出现了crash才能采取。</p>
+<h1 id="crash-recovery的几个阶段">crash recovery的几个阶段</h1>
+<h2 id="tablespace-discovery">Tablespace discovery</h2>
+<p>表空间发现（关联）  <br>
+recovery的核心工作围绕redo log的重放，而在Tablespace discovery这个阶段，InnoDB会先检查需要重放的redo log，并构建其各tablespace的关联关系，据此来决定需要使用哪些tablespace文件</p>
+<h2 id="redo-log-application">Redo log application</h2>
+<p>应用(旧的)redo log<br>
+应用 redo log是crash recovery的核心环节 ，保证未写磁盘的已提交事务完成刷盘。
+之所以说是旧的redo log,是因为redo log application中进行的刷盘操作并不仅在crash recovery中进行，整个innodb的工作周期会持续进行redo log的刷盘，crash recovery中的差别之处在于因为数据库暂时不会允许新的事务进入（也就没有“新的”redo log），因此这里的刷盘可以视为一项针对“旧日志”的一次性刷盘。
+存在两个场景会跳过这个阶段：
+1.redolog上一次的检查点之后没有新的内容：检查点标记了已经完成刷盘的redo log，没有新的内容意味着不存在未写磁盘的提交事务。上一次数据库服务正常终止，或终止前数据库未进行事务操作均会在重启时引发这样的现象
+2.redolog被删除：redolog是可以直接被删除的，此时显然不会（也不能重放redo log）
+看起来场景2似乎存在数据丢失的问题，但可以看出，如果在满足场景1的前提下，删除redo log是没有什么问题的，而实际上，InnoDB的配置项innodb_fast_shutdown允许其在一次正常服务停机之后清除redolog，这样做也确实能节省一定的重启检查开销，但这个节省收效甚微。</p>
+<h2 id="roll-back-of-incomplete-transactions">Roll back of incomplete transactions</h2>
+<p>回滚未完成事务<br>
+除了对提交事务做刷盘，InnoDB同样需要对未提交的事务进行回滚。
+在讨论未提交的事务前，这里先简单介绍一下redo log与binlog的两段式提交机制：
+redo log和binlog的保存，出于一致性的考量，采用了分阶段提交的机制：
+1.redolog第一次提交，并处于prepare状态
+2.binlog完成提交
+3.redolog第二次提交，处于commit状态
+redo log与binlog实际位于不同的层级，这个过程的具体实施会更复杂一些；看已可以看出，redo log的写入不是一件一步到位的事情</p>
+<p>按上面的过程，未完成事务可分为以下三种情况：
+1.redolog未提交且未prepare
+此时可直接对事务进行回滚
+2.redolog处于prepare状态，binlog未提交或不完整
+由于此时事务无法得到有效的binlog，需要进行回滚
+3.redolog处于prepare状态，binlog正常提交
+可进行事务提交</p>
+<p>可以看出，binlog与redo log的一致性是事务是否回滚的量裁标准。</p>
+<h2 id="change-buffer-merge">Change buffer merge</h2>
+<p>合并change buffer<br>
+这里先简单介绍一下change buffer：
+众所周知，insert与update等操作处理修改数据本身，同样可能涉及二级索引的更新，如果需要修改的索引未被加载到内存，则需要先加载到内存再进行修改；而在引入change buffer的情况下，则会先“暂存”这一部分索引更新，等该索引因其他查询依赖而被加载时，再将这部分更新写入索引（完成merge）。在这样的“惰性”加载机制下，innodb即使出现高频的多索引更新，也能起到缓解索引反复加载的效果。
+如果服务重启时存在未被合并的change buffer内容，则这部分内容会在索引被加载的同时完成合并。</p>
+<h2 id="purge清除无用数据">Purge——清除（无用）数据</h2>
+<p>具体而言，是清除那些对数据库而言已被删除，同时对现存事务均不可见的数据</p>
+<h1 id="crash-recovery与数据库的日常工作">crash recovery与数据库的日常工作</h1>
+<p>严格地说，redo log的应用中的刷盘，未完成事务的回滚，change buffer的索引合并，和无用数据的清除都是数据库“日常工作”的一部分。如此看来，crash recovery的定义似乎是模糊的。</p>
+<p>可以直接从数据“新旧”的角度来下这个定义，对crash recovery而言，几个阶段所依赖或可能影响的数据均是本次重启之前的数据，在进行crash recovery之后，数据库保证了这些旧数据不会影响重启后的“新数据”。</p>
+<p>然而即使我们能在定义上对crash recovery进行“切割”，但对数据库而言，它并不会等到完全处理完“旧数据”再开始新工作。实际上，在完成redo log的重放后，InnoDB便会试图响应外部请求，以尽可能早地开始服务，此时来自旧数据与新数据的操作会同时进行，同时，如果存在正被回滚的事务，新请求中的操作可能会与这些待回滚的事务发生冲突，直到这些事务完成回滚。所幸我们无需关心数据库是如何“安排工期”的，对外部而言，似乎所有的操作都是crash recovery再执行的。</p>
+<h1 id="redo-log本身存在损坏">redo log本身存在损坏</h1>
+<p>redo log无疑是crash recovery的核心依赖（也是innoDB工作的核心依赖），因此如果redolog本身存在损坏，则crash recovery也只能把这部分损坏也“原样重放”。</p>
+
+</div>
+
+
+    </main>
+
+    
+      
+    
+  </body>
+</html>

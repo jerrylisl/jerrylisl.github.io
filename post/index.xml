@@ -6,7 +6,16 @@
     <description>Recent content in Posts on L</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Sun, 31 Oct 2021 18:55:32 +0800</lastBuildDate><atom:link href="https://jerrylisl.github.io/post/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Thu, 20 Jan 2022 22:14:05 +0800</lastBuildDate><atom:link href="https://jerrylisl.github.io/post/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>了解下mysql的crash recovery</title>
+      <link>https://jerrylisl.github.io/post/crash/</link>
+      <pubDate>Thu, 20 Jan 2022 22:14:05 +0800</pubDate>
+      
+      <guid>https://jerrylisl.github.io/post/crash/</guid>
+      <description>Innodb的crash recovery机制使得使用者可以无需关注mysql内部可能的异常状态，虽然使用了这个名称——崩溃恢复，但实际InnoDB将crash recovery设定为每一次服务重启的一项“标准流程”，而并非只在出现了crash才能采取。</description>
+    </item>
+    
     <item>
       <title>理解mysql的online_ddl特性</title>
       <link>https://jerrylisl.github.io/post/online_ddl/</link>
